@@ -31,6 +31,7 @@ open class StreamReader  {
     private(set) var fileHandle: FileHandling?
     private(set) var buffer: Data
     private(set) var atEof: Bool
+    private var allDelimeterOffsets: [UInt64]?
     
     open var isClosed: Bool {
         return fileHandle == nil
@@ -54,10 +55,40 @@ open class StreamReader  {
         self.delimiterData = delimiterData
         self.buffer = Data(capacity: chunkSize)
         self.atEof = false
+        
+        allDelimeterOffsets = fileOffsets()
     }
     
     deinit {
         close()
+    }
+    
+    /// Returns next line, or nil on EOF.
+    open func fileOffsets() -> [UInt64] {
+        precondition(fileHandle != nil, "Attempt to read from closed file")
+        
+        var offsets = [UInt64]()
+        
+        var lastOffset: UInt64 = 0
+        // Reads data chunks from file until a line delimiter is found:
+        while !atEof {
+            if let range = buffer.range(of: delimiterData) {
+                // Remove line (and the delimiter) from the buffer:
+                offsets.append(lastOffset)
+                lastOffset += UInt64(range.upperBound)
+                buffer.removeSubrange(0..<range.upperBound)
+                continue
+            }
+            let tmpData = fileHandle!.readData(ofLength: chunkSize)
+            if tmpData.count > 0 {
+                buffer.append(tmpData)
+            } else {
+                // EOF or read error.
+                atEof = true
+                offsets.append(lastOffset)
+            }
+        }
+        return offsets
     }
     
     /// Returns next line, or nil on EOF.
@@ -94,6 +125,16 @@ open class StreamReader  {
     open func rewind() -> Void {
         fileHandle!.seek(toFileOffset: 0)
         buffer.count = 0
+        atEof = false
+    }
+    
+    /// Put the filepointer to a random place
+    open func seekRandom() {
+        buffer.removeAll(keepingCapacity: false)
+        guard let fileOffset = allDelimeterOffsets?.randomElement() else {
+            return
+        }
+        fileHandle!.seek(toFileOffset: fileOffset)
         atEof = false
     }
     
