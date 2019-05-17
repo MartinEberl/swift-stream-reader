@@ -130,10 +130,10 @@ open class StreamReader  {
     
     /// Put the filepointer to a random place
     open func seekRandom() {
-        buffer.removeAll(keepingCapacity: false)
         guard let fileOffset = allDelimeterOffsets?.randomElement() else {
             return
         }
+        buffer.removeAll(keepingCapacity: false)
         fileHandle!.seek(toFileOffset: fileOffset)
         atEof = false
     }
